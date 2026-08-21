@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Employee Registration Form</title>
+<style>
+  :root{
+    --bg:#eef2f7; --card:#ffffff; --ink:#1f2937; --muted:#6b7280;
+    --brand:#1f4e79; --brand-2:#2f6da8; --line:#d8dee9;
+    --ok:#0f7b46; --ok-bg:#e6f6ee; --err:#b42318; --err-bg:#fdecea;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:28px 16px 60px;
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  .wrap{max-width:960px;margin:0 auto}
+  h1{margin:0 0 4px;font-size:26px}
+  .sub{margin:0 0 20px;color:var(--muted);font-size:14px}
+  .sub code{background:#dde5ef;padding:2px 6px;border-radius:4px;font-size:13px}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 6px 20px rgba(16,32,64,.06);overflow:hidden;margin-bottom:22px;
+  }
+  .card-head{
+    background:linear-gradient(90deg,var(--brand),var(--brand-2));
+    color:#fff;padding:14px 20px;font-size:16px;font-weight:600;
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+  }
+  .card-body{padding:20px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .full{grid-column:1 / -1}
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+  .req{color:var(--err)}
+  input,select,textarea{
+    width:100%;padding:10px 12px;font:inherit;font-size:14px;color:var(--ink);
+    background:#fff;border:1px solid var(--line);border-radius:8px;outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  textarea{resize:vertical;min-height:78px}
+  input:focus,select:focus,textarea:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(47,109,168,.15)}
+  input.invalid,select.invalid,textarea.invalid{border-color:var(--err);background:var(--err-bg)}
+  .err{display:block;min-height:15px;margin-top:4px;font-size:12px;color:var(--err)}
+  .radios{display:flex;gap:18px;padding-top:6px}
+  .radios label{display:flex;align-items:center;gap:6px;font-weight:400;margin:0;font-size:14px}
+  .radios input{width:auto}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  button{
+    font:inherit;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;
+    border:1px solid transparent;cursor:pointer;transition:.15s;
+  }
+  .btn-primary{background:var(--brand);color:#fff}
+  .btn-primary:hover{background:var(--brand-2)}
+  .btn-ghost{background:#fff;color:var(--brand);border-color:var(--line)}
+  .btn-ghost:hover{background:#f3f6fa}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  .storebar{
+    display:flex;gap:14px;align-items:flex-start;
+    background:#e8f4ff;border:1px solid #b9dcff;border-left:5px solid var(--brand);
+    border-radius:10px;padding:14px 16px;margin-bottom:18px;font-size:13.5px;line-height:1.5;
+  }
+  .storebar-ico{font-size:22px;line-height:1}
+  .storebar-path{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+  .storebar-path code{background:#fff;border:1px solid #cfe3f7;padding:3px 8px;border-radius:5px}
+  .badge{background:var(--brand);color:#fff;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600}
+  .toast{display:none;padding:11px 14px;border-radius:8px;font-size:14px;margin-bottom:16px}
+  .toast.show{display:block}
+  .toast.ok{background:var(--ok-bg);color:var(--ok);border:1px solid #b7e3cc}
+  .toast.bad{background:var(--err-bg);color:var(--err);border:1px solid #f5c2bd}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  th{background:#f4f7fb;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#48566a}
+  tbody tr:hover{background:#f8fafc}
+  .empty{padding:22px;text-align:center;color:var(--muted);font-size:14px}
+  .scroll{overflow-x:auto}
+  .pill{background:rgba(255,255,255,.2);padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Employee Registration</h1>
+  <p class="sub">
+    Served by <code>PowerShell</code> on port <code id="portNum">—</code>
+  </p>
+
+  <div id="offlineBar" style="display:none;background:#fdecea;border:1px solid #f5c2bd;border-left:5px solid #b42318;color:#7a1c14;border-radius:10px;padding:16px 18px;margin-bottom:18px;font-size:14px;line-height:1.6">
+    <strong style="font-size:15px">&#9888;&nbsp; Not connected to the PowerShell server &mdash; nothing can be saved</strong>
+    <div style="margin-top:8px">
+      This page is being viewed as a plain file, so the form has no backend to write the Excel file.
+      <strong>Saving will not work in this mode.</strong>
+    </div>
+    <div style="margin-top:10px">To fix it, run the server and open the address it prints:</div>
+    <pre style="background:#fff;border:1px solid #f0cdc8;border-radius:6px;padding:10px 12px;margin:8px 0 0;overflow-x:auto;font-size:13px">cd employee-form
+pwsh -File server.ps1
+
+# then open the URL it shows, e.g.  http://localhost:8080/</pre>
+    <div style="margin-top:10px;font-size:13px">
+      Do <em>not</em> open <code>static/index.html</code> by double-clicking it &mdash; it must be served by <code>server.ps1</code>.
+    </div>
+  </div>
+
+  <div class="storebar">
+    <div class="storebar-ico">&#128190;</div>
+    <div class="storebar-txt">
+      <strong>Records are saved automatically</strong> &mdash; every submit appends a new row directly to the
+      Excel file on disk. Nothing is held in the browser, and you do <em>not</em> need to download anything.
+      <div class="storebar-path">
+        <span>Excel file:</span> <code id="filePath">D:\employee\data\form.xlsx</code>
+        <span class="badge" id="savedCount">0 records stored</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div class="card">
+    <div class="card-head"><span>Employee Details</span></div>
+    <div class="card-body">
+      <form id="empForm" novalidate>
+        <div class="grid">
+          <div>
+            <label for="name">Full Name <span class="req">*</span></label>
+            <input id="name" name="name" type="text" placeholder="e.g. Ali Raza" />
+            <span class="err" data-err="name"></span>
+          </div>
+          <div>
+            <label for="email">Email <span class="req">*</span></label>
+            <input id="email" name="email" type="email" placeholder="ali@company.com" />
+            <span class="err" data-err="email"></span>
+          </div>
+          <div>
+            <label for="phone">Phone <span class="req">*</span></label>
+            <input id="phone" name="phone" type="text" placeholder="+92 300 1234567" />
+            <span class="err" data-err="phone"></span>
+          </div>
+          <div>
+            <label for="department">Department <span class="req">*</span></label>
+            <select id="department" name="department">
+              <option value="">-- Select --</option>
+              <option>Information Technology</option>
+              <option>Human Resources</option>
+              <option>Finance</option>
+              <option>Sales &amp; Marketing</option>
+              <option>Operations</option>
+              <option>Customer Support</option>
+            </select>
+            <span class="err" data-err="department"></span>
+          </div>
+          <div>
+            <label for="designation">Designation <span class="req">*</span></label>
+            <input id="designation" name="designation" type="text" placeholder="e.g. Software Engineer" />
+            <span class="err" data-err="designation"></span>
+          </div>
+          <div>
+            <label for="joining_date">Joining Date <span class="req">*</span></label>
+            <input id="joining_date" name="joining_date" type="date" />
+            <span class="err" data-err="joining_date"></span>
+          </div>
+          <div>
+            <label for="salary">Salary</label>
+            <input id="salary" name="salary" type="number" min="0" step="0.01" placeholder="150000" />
+            <span class="err" data-err="salary"></span>
+          </div>
+          <div>
+            <label>Gender</label>
+            <div class="radios">
+              <label><input type="radio" name="gender" value="Male" checked /> Male</label>
+              <label><input type="radio" name="gender" value="Female" /> Female</label>
+              <label><input type="radio" name="gender" value="Other" /> Other</label>
+            </div>
+            <span class="err" data-err="gender"></span>
+          </div>
+          <div class="full">
+            <label for="address">Address</label>
+            <textarea id="address" name="address" placeholder="Street, city, country"></textarea>
+            <span class="err" data-err="address"></span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="submitBtn">Save to Excel</button>
+          <button type="reset" class="btn-ghost">Reset</button>
+          <button type="button" class="btn-ghost" id="downloadBtn" title="Optional: grab a copy. The master file on disk is already up to date.">Download a copy (optional)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span>Saved Records &mdash; read live from the Excel file on disk</span>
+      <span class="pill" id="count">0 rows</span>
+    </div>
+    <div class="scroll">
+      <table id="tbl">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty">No records yet — submit the form above.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const form     = document.getElementById('empForm');
+const btn      = document.getElementById('submitBtn');
+const toast    = document.getElementById('toast');
+const theadRow = document.getElementById('thead');
+const tbody    = document.getElementById('tbody');
+const empty    = document.getElementById('empty');
+const countEl  = document.getElementById('count');
+
+function showToast(msg, ok = true) {
+  toast.textContent = msg;
+  toast.className = 'toast show ' + (ok ? 'ok' : 'bad');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.className = 'toast', 5000);
+}
+
+function clearErrors() {
+  document.querySelectorAll('.err').forEach(e => e.textContent = '');
+  document.querySelectorAll('.invalid').forEach(e => e.classList.remove('invalid'));
+}
+
+function setError(field, msg) {
+  const slot = document.querySelector(`[data-err="${field}"]`);
+  if (slot) slot.textContent = msg;
+  const input = form.elements[field];
+  if (input && input.classList) input.classList.add('invalid');
+}
+
+/* ---------- client-side validation (server re-validates too) ---------- */
+function validate(d) {
+  const e = {};
+  if (!d.name || d.name.trim().length < 2)                     e.name = 'Name must be at least 2 characters.';
+  if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(d.email || ''))  e.email = 'Enter a valid email address.';
+  if (!/^[0-9+\-\s()]{7,20}$/.test(d.phone || ''))             e.phone = 'Enter a valid phone number.';
+  if (!d.department)                                           e.department = 'Please select a department.';
+  if (!d.designation || !d.designation.trim())                 e.designation = 'Designation is required.';
+  if (!d.joining_date)                                         e.joining_date = 'Joining date is required.';
+  if (d.salary && (isNaN(+d.salary) || +d.salary < 0))         e.salary = 'Salary must be a positive number.';
+  return e;
+}
+
+form.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  clearErrors();
+
+  const data = Object.fromEntries(new FormData(form).entries());
+  const errs = validate(data);
+  if (Object.keys(errs).length) {
+    Object.entries(errs).forEach(([k, v]) => setError(k, v));
+    showToast('Please fix the highlighted fields.', false);
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    const res  = await fetch('/api/employees', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      if (json.errors) Object.entries(json.errors).forEach(([k, v]) => setError(k, v));
+      showToast(json.message || 'Could not save the record.', false);
+    } else {
+      showToast(`${json.message}  Appended to ${json.file} — ${json.total_records} record(s) now stored on disk.`, true);
+      form.reset();
+      loadRecords();
+    }
+  } catch (err) {
+    setOffline(true, err.message);
+    showToast('NOT SAVED — cannot reach the PowerShell server. Start it with "pwsh -File server.ps1" and open the URL it prints.', false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save to Excel';
+  }
+});
+
+form.addEventListener('reset', clearErrors);
+document.getElementById('downloadBtn').onclick = () => window.location = '/api/download';
+
+/* Detects whether the PowerShell backend is actually reachable.
+   Without this the page fails silently and looks like "nothing is saving". */
+function setOffline(isOffline, reason) {
+  document.getElementById('offlineBar').style.display = isOffline ? 'block' : 'none';
+  document.querySelector('.storebar').style.display   = isOffline ? 'none'  : 'flex';
+  btn.disabled = isOffline;
+  btn.textContent = isOffline ? 'Server not connected' : 'Save to Excel';
+  form.querySelectorAll('input,select,textarea').forEach(el => el.disabled = isOffline);
+  if (isOffline && reason) console.error('[employee-form] backend unreachable:', reason);
+}
+
+async function loadInfo() {
+  try {
+    const r = await fetch('/api/info', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    document.getElementById('portNum').textContent = j.port;
+    document.getElementById('filePath').textContent = j.file;
+    setOffline(false);
+    return true;
+  } catch (e) {
+    setOffline(true, e.message);
+    return false;
+  }
+}
+
+async function loadRecords() {
+  try {
+    const res  = await fetch('/api/employees');
+    const json = await res.json();
+    document.getElementById('filePath').textContent = json.file;
+
+    theadRow.innerHTML = json.headers.map(h => `<th>${h}</th>`).join('');
+    tbody.innerHTML = json.rows.map(r =>
+      '<tr>' + json.headers.map((_, i) => `<td>${r[i] ?? ''}</td>`).join('') + '</tr>'
+    ).join('');
+
+    countEl.textContent = json.rows.length + (json.rows.length === 1 ? ' row' : ' rows');
+    document.getElementById('savedCount').textContent =
+      json.rows.length + (json.rows.length === 1 ? ' record stored' : ' records stored');
+    empty.style.display = json.rows.length ? 'none' : 'block';
+    document.getElementById('tbl').style.display = json.rows.length ? 'table' : 'none';
+  } catch (e) {
+    empty.textContent = 'Cannot read records — the PowerShell server is not reachable. Start it with: pwsh -File server.ps1';
+    empty.style.display = 'block';
+    document.getElementById('tbl').style.display = 'none';
+    setOffline(true, e.message);
+  }
+}
+
+loadInfo();
+loadRecords();
+</script>
+</body>
+</html>
