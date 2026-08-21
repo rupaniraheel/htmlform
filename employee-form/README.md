@@ -54,7 +54,7 @@ Tries `8080, 8000, 5000, 3000, 8888, 5050, 7070, 9090, 4200, 8081` in order and 
 `ID | Employee Name | Email | Phone | Department | Designation | Joining Date | Salary | Gender | Address | Submitted At`
 
 ## Edit or delete a record
-Each saved row has **Edit** and **Delete** buttons in the Actions column:
+Each saved row has **Edit** and **Delete** buttons in the sticky **Actions** column at the left of the table:
 - **Edit** loads the row into the form. Choose **Update Record** to save changes or **Cancel Edit** to leave it unchanged.
 - **Delete** asks for confirmation and then permanently removes the row from the active workbook.
 

@@ -59,6 +59,12 @@
   .btn-danger:hover{background:var(--err-bg)}
   .btn-small{padding:6px 10px;font-size:12px;white-space:nowrap}
   .row-actions{display:flex;gap:6px}
+  .action-col{
+    position:sticky;left:0;z-index:2;min-width:132px;background:#fff;
+    box-shadow:1px 0 0 var(--line);
+  }
+  th.action-col{z-index:3;background:#f4f7fb}
+  tbody tr:hover td.action-col{background:#f8fafc}
   .editing-note{display:none;color:#fff;font-size:12px;font-weight:400}
   .editing-note.show{display:inline}
   [hidden]{display:none !important}
@@ -406,9 +412,10 @@ async function deleteRecord(id, name, deleteButton) {
 
 function renderRecords(headers, rows) {
   theadRow.replaceChildren();
-  [...headers, 'Actions'].forEach(header => {
+  ['Actions', ...headers].forEach((header, index) => {
     const th = document.createElement('th');
     th.textContent = header;
+    if (index === 0) th.className = 'action-col';
     theadRow.appendChild(th);
   });
 
@@ -422,6 +429,7 @@ function renderRecords(headers, rows) {
     });
 
     const actionCell = document.createElement('td');
+    actionCell.className = 'action-col';
     const actions = document.createElement('div');
     actions.className = 'row-actions';
 
@@ -441,7 +449,7 @@ function renderRecords(headers, rows) {
 
     actions.append(editButton, deleteButton);
     actionCell.appendChild(actions);
-    tr.appendChild(actionCell);
+    tr.prepend(actionCell);
     tbody.appendChild(tr);
   });
 }
