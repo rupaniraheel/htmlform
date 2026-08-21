@@ -55,6 +55,13 @@
   .btn-primary:hover{background:var(--brand-2)}
   .btn-ghost{background:#fff;color:var(--brand);border-color:var(--line)}
   .btn-ghost:hover{background:#f3f6fa}
+  .btn-danger{background:#fff;color:var(--err);border-color:#efb4ae}
+  .btn-danger:hover{background:var(--err-bg)}
+  .btn-small{padding:6px 10px;font-size:12px;white-space:nowrap}
+  .row-actions{display:flex;gap:6px}
+  .editing-note{display:none;color:#fff;font-size:12px;font-weight:400}
+  .editing-note.show{display:inline}
+  [hidden]{display:none !important}
   button:disabled{opacity:.6;cursor:not-allowed}
   .storebar{
     display:flex;gap:14px;align-items:flex-start;
@@ -117,7 +124,10 @@ pwsh -File server.ps1
   <div id="toast" class="toast"></div>
 
   <div class="card">
-    <div class="card-head"><span>Employee Details</span></div>
+    <div class="card-head">
+      <span>Employee Details</span>
+      <span class="editing-note" id="editingNote">Editing record</span>
+    </div>
     <div class="card-body">
       <form id="empForm" novalidate>
         <div class="grid">
@@ -183,6 +193,7 @@ pwsh -File server.ps1
         <div class="actions">
           <button type="submit" class="btn-primary" id="submitBtn">Save to Excel</button>
           <button type="reset" class="btn-ghost">Reset</button>
+          <button type="button" class="btn-ghost" id="cancelEditBtn" hidden>Cancel Edit</button>
           <button type="button" class="btn-ghost" id="downloadBtn" title="Optional: grab a copy. The master file on disk is already up to date.">Download a copy (optional)</button>
         </div>
       </form>
@@ -212,6 +223,21 @@ const theadRow = document.getElementById('thead');
 const tbody    = document.getElementById('tbody');
 const empty    = document.getElementById('empty');
 const countEl  = document.getElementById('count');
+const cancelEditBtn = document.getElementById('cancelEditBtn');
+const editingNote   = document.getElementById('editingNote');
+let editingId = null;
+let currentRows = [];
+let serverOffline = false;
+let submitting = false;
+
+function refreshSubmitButton() {
+  btn.disabled = serverOffline || submitting;
+  btn.textContent = serverOffline
+    ? 'Server not connected'
+    : submitting
+      ? (editingId === null ? 'Saving...' : 'Updating...')
+      : (editingId === null ? 'Save to Excel' : 'Update Record');
+}
 
 function showToast(msg, ok = true) {
   toast.textContent = msg;
@@ -245,6 +271,41 @@ function validate(d) {
   return e;
 }
 
+function beginEdit(row) {
+  clearErrors();
+  editingId = String(row[0]);
+
+  const values = {
+    name: row[1],
+    email: row[2],
+    phone: row[3],
+    department: row[4],
+    designation: row[5],
+    joining_date: row[6],
+    salary: row[7],
+    gender: row[8],
+    address: row[9]
+  };
+  Object.entries(values).forEach(([field, value]) => {
+    if (form.elements[field]) form.elements[field].value = value ?? '';
+  });
+
+  editingNote.textContent = `Editing record #${editingId}`;
+  editingNote.classList.add('show');
+  cancelEditBtn.hidden = false;
+  refreshSubmitButton();
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  form.elements.name.focus({ preventScroll: true });
+}
+
+function exitEditMode() {
+  editingId = null;
+  editingNote.classList.remove('show');
+  editingNote.textContent = 'Editing record';
+  cancelEditBtn.hidden = true;
+  refreshSubmitButton();
+}
+
 form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   clearErrors();
@@ -257,10 +318,13 @@ form.addEventListener('submit', async (ev) => {
     return;
   }
 
-  btn.disabled = true; btn.textContent = 'Saving...';
+  const recordId = editingId;
+  const isEditing = recordId !== null;
+  submitting = true;
+  refreshSubmitButton();
   try {
-    const res  = await fetch('/api/employees', {
-      method: 'POST',
+    const res = await fetch(isEditing ? `/api/employees/${encodeURIComponent(recordId)}` : '/api/employees', {
+      method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
@@ -268,31 +332,37 @@ form.addEventListener('submit', async (ev) => {
 
     if (!res.ok || !json.ok) {
       if (json.errors) Object.entries(json.errors).forEach(([k, v]) => setError(k, v));
-      showToast(json.message || 'Could not save the record.', false);
+      showToast(json.message || `Could not ${isEditing ? 'update' : 'save'} the record.`, false);
     } else {
-      showToast(`${json.message}  Appended to ${json.file} — ${json.total_records} record(s) now stored on disk.`, true);
+      const action = isEditing ? 'Updated in' : 'Appended to';
+      showToast(`${json.message}  ${action} ${json.file} — ${json.total_records} record(s) now stored on disk.`, true);
       form.reset();
-      loadRecords();
+      await loadRecords();
     }
   } catch (err) {
     setOffline(true, err.message);
-    showToast('NOT SAVED — cannot reach the PowerShell server. Start it with "pwsh -File server.ps1" and open the URL it prints.', false);
+    showToast(`NOT ${isEditing ? 'UPDATED' : 'SAVED'} — cannot reach the PowerShell server. Start it with "pwsh -File server.ps1" and open the URL it prints.`, false);
   } finally {
-    btn.disabled = false; btn.textContent = 'Save to Excel';
+    submitting = false;
+    refreshSubmitButton();
   }
 });
 
-form.addEventListener('reset', clearErrors);
+form.addEventListener('reset', () => {
+  clearErrors();
+  exitEditMode();
+});
+cancelEditBtn.addEventListener('click', () => form.reset());
 document.getElementById('downloadBtn').onclick = () => window.location = '/api/download';
 
 /* Detects whether the PowerShell backend is actually reachable.
    Without this the page fails silently and looks like "nothing is saving". */
 function setOffline(isOffline, reason) {
+  serverOffline = isOffline;
   document.getElementById('offlineBar').style.display = isOffline ? 'block' : 'none';
   document.querySelector('.storebar').style.display   = isOffline ? 'none'  : 'flex';
-  btn.disabled = isOffline;
-  btn.textContent = isOffline ? 'Server not connected' : 'Save to Excel';
   form.querySelectorAll('input,select,textarea').forEach(el => el.disabled = isOffline);
+  refreshSubmitButton();
   if (isOffline && reason) console.error('[employee-form] backend unreachable:', reason);
 }
 
@@ -311,22 +381,88 @@ async function loadInfo() {
   }
 }
 
+async function deleteRecord(id, name, deleteButton) {
+  if (!window.confirm(`Delete record #${id} (${name || 'unnamed employee'})? This cannot be undone.`)) return;
+
+  deleteButton.disabled = true;
+  try {
+    const res = await fetch(`/api/employees/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (!res.ok || !json.ok) {
+      showToast(json.message || 'Could not delete the record.', false);
+      return;
+    }
+
+    if (String(editingId) === String(id)) form.reset();
+    showToast(`${json.message}  ${json.total_records} record(s) remain on disk.`, true);
+    await loadRecords();
+  } catch (e) {
+    setOffline(true, e.message);
+    showToast('NOT DELETED — cannot reach the PowerShell server.', false);
+  } finally {
+    if (deleteButton.isConnected) deleteButton.disabled = false;
+  }
+}
+
+function renderRecords(headers, rows) {
+  theadRow.replaceChildren();
+  [...headers, 'Actions'].forEach(header => {
+    const th = document.createElement('th');
+    th.textContent = header;
+    theadRow.appendChild(th);
+  });
+
+  tbody.replaceChildren();
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    headers.forEach((_, index) => {
+      const td = document.createElement('td');
+      td.textContent = row[index] ?? '';
+      tr.appendChild(td);
+    });
+
+    const actionCell = document.createElement('td');
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.className = 'btn-ghost btn-small';
+    editButton.textContent = 'Edit';
+    editButton.setAttribute('aria-label', `Edit record ${row[0]}`);
+    editButton.addEventListener('click', () => beginEdit(row));
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'btn-danger btn-small';
+    deleteButton.textContent = 'Delete';
+    deleteButton.setAttribute('aria-label', `Delete record ${row[0]}`);
+    deleteButton.addEventListener('click', () => deleteRecord(row[0], row[1], deleteButton));
+
+    actions.append(editButton, deleteButton);
+    actionCell.appendChild(actions);
+    tr.appendChild(actionCell);
+    tbody.appendChild(tr);
+  });
+}
+
 async function loadRecords() {
   try {
-    const res  = await fetch('/api/employees');
+    const res  = await fetch('/api/employees', { cache: 'no-store' });
     const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error(json.message || `HTTP ${res.status}`);
+
+    currentRows = json.rows;
     document.getElementById('filePath').textContent = json.file;
+    renderRecords(json.headers, currentRows);
 
-    theadRow.innerHTML = json.headers.map(h => `<th>${h}</th>`).join('');
-    tbody.innerHTML = json.rows.map(r =>
-      '<tr>' + json.headers.map((_, i) => `<td>${r[i] ?? ''}</td>`).join('') + '</tr>'
-    ).join('');
-
-    countEl.textContent = json.rows.length + (json.rows.length === 1 ? ' row' : ' rows');
+    countEl.textContent = currentRows.length + (currentRows.length === 1 ? ' row' : ' rows');
     document.getElementById('savedCount').textContent =
-      json.rows.length + (json.rows.length === 1 ? ' record stored' : ' records stored');
-    empty.style.display = json.rows.length ? 'none' : 'block';
-    document.getElementById('tbl').style.display = json.rows.length ? 'table' : 'none';
+      currentRows.length + (currentRows.length === 1 ? ' record stored' : ' records stored');
+    empty.textContent = 'No records yet — submit the form above.';
+    empty.style.display = currentRows.length ? 'none' : 'block';
+    document.getElementById('tbl').style.display = currentRows.length ? 'table' : 'none';
+    setOffline(false);
   } catch (e) {
     empty.textContent = 'Cannot read records — the PowerShell server is not reachable. Start it with: pwsh -File server.ps1';
     empty.style.display = 'block';

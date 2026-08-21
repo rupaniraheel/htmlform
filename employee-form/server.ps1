@@ -252,7 +252,17 @@ function Add-Record {
             }
 
             $newRow = $lastRow + 1
-            $id     = $lastRow            # header is row 1 -> id == record count + 1
+
+            # IDs belong to records, not row numbers. Deleting a middle row must not
+            # cause the next insert to duplicate an ID that is still in use.
+            $maxId = 0
+            for ($r = 2; $r -le $lastRow; $r++) {
+                $rowId = 0
+                if ([int]::TryParse(([string]$ws.Cells[$r, 1].Value), [ref]$rowId) -and $rowId -gt $maxId) {
+                    $maxId = $rowId
+                }
+            }
+            $id = $maxId + 1
 
             $ws.Cells[$newRow, 1 ].Value = $id
             $ws.Cells[$newRow, 2 ].Value = ([string]$Data.name).Trim()
@@ -275,6 +285,101 @@ function Add-Record {
             Close-ExcelPackage $pkg -Show:$false
             $pkg = $null
             return @{ ok = $true; id = $id; total = $newRow - 1 }
+        }
+        finally { if ($pkg) { Close-ExcelPackage $pkg -NoSave } }
+    }
+    finally { $mutex.ReleaseMutex(); $mutex.Dispose() }
+}
+
+function Find-RecordRow {
+    param($Worksheet, [int]$Id)
+
+    if (-not $Worksheet.Dimension) { return 0 }
+    for ($r = 2; $r -le $Worksheet.Dimension.End.Row; $r++) {
+        $rowId = 0
+        if ([int]::TryParse(([string]$Worksheet.Cells[$r, 1].Value), [ref]$rowId) -and $rowId -eq $Id) {
+            return $r
+        }
+    }
+    return 0
+}
+
+function Update-Record {
+    param([int]$Id, [hashtable]$Data)
+
+    $mutex = New-Object System.Threading.Mutex($false, 'Global\EmployeeFormXlsx')
+    [void]$mutex.WaitOne()
+    try {
+        Initialize-Workbook -Quiet
+        $pkg = Open-ExcelPackage -Path $script:XlsxPath
+        try {
+            $ws = $pkg.Workbook.Worksheets['Employees']
+            if (-not $ws) { return @{ ok = $false; notFound = $true } }
+
+            $targetRow = Find-RecordRow -Worksheet $ws -Id $Id
+            if ($targetRow -eq 0) { return @{ ok = $false; notFound = $true } }
+
+            # An edited email must still be unique, excluding this record itself.
+            $email   = ([string]$Data.email).Trim().ToLower()
+            $lastRow = if ($ws.Dimension) { $ws.Dimension.End.Row } else { 1 }
+            for ($r = 2; $r -le $lastRow; $r++) {
+                if ($r -eq $targetRow) { continue }
+                $existing = ([string]$ws.Cells[$r, 3].Value).Trim().ToLower()
+                if ($existing -eq $email) {
+                    return @{ ok = $false; duplicate = $true }
+                }
+            }
+
+            $ws.Cells[$targetRow, 2 ].Value = ([string]$Data.name).Trim()
+            $ws.Cells[$targetRow, 3 ].Value = ([string]$Data.email).Trim()
+            $ws.Cells[$targetRow, 4 ].Value = ([string]$Data.phone).Trim()
+            $ws.Cells[$targetRow, 5 ].Value = ([string]$Data.department).Trim()
+            $ws.Cells[$targetRow, 6 ].Value = ([string]$Data.designation).Trim()
+            $ws.Cells[$targetRow, 7 ].Value = ([string]$Data.joining_date).Trim()
+
+            $sal = ([string]$Data.salary).Trim()
+            if ($sal) {
+                $ws.Cells[$targetRow, 8].Value = [double]$sal
+                $ws.Cells[$targetRow, 8].Style.Numberformat.Format = '#,##0.00'
+            } else {
+                $ws.Cells[$targetRow, 8].Value = $null
+            }
+
+            $ws.Cells[$targetRow, 9 ].Value = ([string]$Data.gender).Trim()
+            $ws.Cells[$targetRow, 10].Value = ([string]$Data.address).Trim()
+            # Keep the original Submitted At value in column 11.
+
+            Close-ExcelPackage $pkg -Show:$false
+            $pkg = $null
+            return @{ ok = $true; id = $Id; total = $lastRow - 1 }
+        }
+        finally { if ($pkg) { Close-ExcelPackage $pkg -NoSave } }
+    }
+    finally { $mutex.ReleaseMutex(); $mutex.Dispose() }
+}
+
+function Remove-Record {
+    param([int]$Id)
+
+    $mutex = New-Object System.Threading.Mutex($false, 'Global\EmployeeFormXlsx')
+    [void]$mutex.WaitOne()
+    try {
+        Initialize-Workbook -Quiet
+        $pkg = Open-ExcelPackage -Path $script:XlsxPath
+        try {
+            $ws = $pkg.Workbook.Worksheets['Employees']
+            if (-not $ws) { return @{ ok = $false; notFound = $true } }
+
+            $targetRow = Find-RecordRow -Worksheet $ws -Id $Id
+            if ($targetRow -eq 0) { return @{ ok = $false; notFound = $true } }
+
+            $name = [string]$ws.Cells[$targetRow, 2].Value
+            $ws.DeleteRow($targetRow, 1)
+            $total = if ($ws.Dimension) { [Math]::Max(0, $ws.Dimension.End.Row - 1) } else { 0 }
+
+            Close-ExcelPackage $pkg -Show:$false
+            $pkg = $null
+            return @{ ok = $true; id = $Id; name = $name; total = $total }
         }
         finally { if ($pkg) { Close-ExcelPackage $pkg -NoSave } }
     }
@@ -507,6 +612,75 @@ try {
                     Send-Json $ctx @{
                         ok            = $true
                         message       = "Record #$($result.id) saved to Excel."
+                        file          = $script:XlsxPath
+                        total_records = $result.total
+                    }
+                    break
+                }
+
+                # ---------- update an existing row -----------------------
+                '^PUT /api/employees/([0-9]+)$' {
+                    $recordId = 0
+                    if (-not [int]::TryParse($Matches[1], [ref]$recordId) -or $recordId -lt 1) {
+                        Send-Json $ctx @{ ok = $false; message = 'Invalid employee ID.' } 400
+                        break
+                    }
+
+                    $reader = [System.IO.StreamReader]::new($req.InputStream, [System.Text.Encoding]::UTF8)
+                    $raw    = $reader.ReadToEnd(); $reader.Close()
+
+                    $data = @{}
+                    try   { $data = ConvertTo-Hashtable ($raw | ConvertFrom-Json) }
+                    catch { Send-Json $ctx @{ ok = $false; message = 'Invalid JSON body.' } 400; break }
+
+                    $errors = Test-Record $data
+                    if ($errors.Count -gt 0) {
+                        Send-Json $ctx @{ ok = $false; message = 'Please fix the highlighted fields.'; errors = $errors } 400
+                        break
+                    }
+
+                    $result = Update-Record -Id $recordId -Data $data
+                    if ($result.notFound) {
+                        Send-Json $ctx @{ ok = $false; message = "Record #$recordId was not found." } 404
+                        break
+                    }
+                    if ($result.duplicate) {
+                        Send-Json $ctx @{
+                            ok      = $false
+                            message = 'This email is already saved in the Excel file.'
+                            errors  = @{ email = 'Duplicate email.' }
+                        } 409
+                        break
+                    }
+
+                    Write-Host ("  ~  row #{0} updated  ({1})" -f $recordId, $data.name) -ForegroundColor Cyan
+                    Send-Json $ctx @{
+                        ok            = $true
+                        message       = "Record #$recordId updated in Excel."
+                        file          = $script:XlsxPath
+                        total_records = $result.total
+                    }
+                    break
+                }
+
+                # ---------- delete an existing row -----------------------
+                '^DELETE /api/employees/([0-9]+)$' {
+                    $recordId = 0
+                    if (-not [int]::TryParse($Matches[1], [ref]$recordId) -or $recordId -lt 1) {
+                        Send-Json $ctx @{ ok = $false; message = 'Invalid employee ID.' } 400
+                        break
+                    }
+
+                    $result = Remove-Record -Id $recordId
+                    if ($result.notFound) {
+                        Send-Json $ctx @{ ok = $false; message = "Record #$recordId was not found." } 404
+                        break
+                    }
+
+                    Write-Host ("  -  row #{0} deleted  ({1})" -f $recordId, $result.name) -ForegroundColor Yellow
+                    Send-Json $ctx @{
+                        ok            = $true
+                        message       = "Record #$recordId deleted from Excel."
                         file          = $script:XlsxPath
                         total_records = $result.total
                     }

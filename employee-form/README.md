@@ -42,19 +42,26 @@ Tries `8080, 8000, 5000, 3000, 8888, 5050, 7070, 9090, 4200, 8081` in order and 
 ## API
 | Method | Route | Purpose |
 |---|---|---|
-| GET  | `/`               | The form page |
-| POST | `/api/employees`  | Validate + append one row to the xlsx |
-| GET  | `/api/employees`  | Read all rows back as JSON |
-| GET  | `/api/download`   | Download `form.xlsx` |
-| GET  | `/api/info`       | Active port + real Excel path in use |
+| GET    | `/`                     | The form page |
+| GET    | `/api/employees`        | Read all rows back as JSON |
+| POST   | `/api/employees`        | Validate and append one row |
+| PUT    | `/api/employees/{id}`   | Validate and update one row |
+| DELETE | `/api/employees/{id}`   | Permanently delete one row |
+| GET    | `/api/download`         | Download `form.xlsx` |
+| GET    | `/api/info`             | Active port + real Excel path in use |
 
 ## Columns
 `ID | Employee Name | Email | Phone | Department | Designation | Joining Date | Salary | Gender | Address | Submitted At`
 
-## How records are stored (important)
-The workbook at the predefined path is the **permanent database**. Each submit opens that same file and appends **one new row** — it is never rewritten from scratch and never overwritten.
+## Edit or delete a record
+Each saved row has **Edit** and **Delete** buttons in the Actions column:
+- **Edit** loads the row into the form. Choose **Update Record** to save changes or **Cancel Edit** to leave it unchanged.
+- **Delete** asks for confirmation and then permanently removes the row from the active workbook.
 
-- Records accumulate **forever**, across server restarts and reboots. *Verified: rows written before a restart were still there afterwards, and the next submit appended as row #4 rather than resetting.*
+## How records are stored (important)
+The workbook at the predefined path is the **permanent database**. New submissions append rows; edits update the matching row; deletes remove the matching row.
+
+- Records persist across server restarts and reboots until explicitly deleted.
 - **You never have to download anything to save data.** `Download a copy (optional)` just hands you a snapshot copy; the master file on disk is already current the instant you hit Save.
 - On startup the server reports how many records are already stored, e.g.
   `Existing workbook opened: D:\employee\data\form.xlsx  (37 record(s) already stored - new rows will be appended)`
@@ -73,7 +80,7 @@ The workbook is only written where the server can actually write:
 - **Why a server at all?** Browser JS can't write to a fixed disk path like `D:\employee\data\form.xlsx`. The PowerShell listener does the file write.
 - Validation runs in the browser **and** again in PowerShell before anything is written.
 - Duplicate emails are rejected with HTTP 409 (case-insensitive).
-- Writes are serialised with a named **Mutex**, so concurrent submits can't corrupt the workbook.
+- Writes are serialised with a named **Mutex**, so concurrent adds, edits, and deletes can't corrupt the workbook.
 - Salary is stored as a real number formatted `#,##0.00`; the header row is styled and frozen.
 - Binds `http://+:PORT/`; on Windows without admin rights that needs a URL ACL, so it automatically retries on `localhost` only.
 - If `D:\employee\data` isn't writable it falls back to `./data/form.xlsx` and the UI shows the real path in use.
